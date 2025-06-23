@@ -6,7 +6,8 @@ Automates the booking of multiple short parking sessions to optimize costs.
 Splits long sessions into shorter ones with configurable breaks.
 
 Usage:
-    python park.py "13:00-14:00"
+    python park.py "13:00-14:00"                    # Book for today
+    python park.py "13:00-14:00" --tomorrow         # Book for tomorrow
     python park.py "13:10-14:00" --session=15 --max-break=3
 """
 
@@ -125,6 +126,17 @@ class RobustElementFinder:
             (By.CSS_SELECTOR, "[class*='time'] [class*='budget']"),
         ]
         return self._try_strategies(strategies, "time budget element", required=False)
+    
+    def find_date_dropdown(self):
+        """Find date selection dropdown with multiple strategies."""
+        strategies = [
+            (By.CSS_SELECTOR, "select[name*='date' i]"),
+            (By.CSS_SELECTOR, "select[name*='datum' i]"),
+            (By.CSS_SELECTOR, "select[name*='start' i]"),
+            (By.XPATH, "//select[option[contains(text(), 'Vandaag') or contains(text(), 'Morgen')]]"),
+            (By.CSS_SELECTOR, "select"),  # Fallback to any select
+        ]
+        return self._try_strategies(strategies, "date dropdown", required=False)
     
     def _try_strategies(self, strategies: List[Tuple], element_name: str, required: bool = True):
         """Try multiple element finding strategies."""
@@ -265,7 +277,7 @@ class AmsterdamParkingBot:
         except Exception as e:
             raise WebDriverException(f"Failed to initialize WebDriver: {e}")
     
-    def _parse_time_range(self, time_range: str) -> Tuple[datetime, datetime]:
+    def _parse_time_range(self, time_range: str, target_date: Optional[datetime] = None) -> Tuple[datetime, datetime]:
         """Parse time range string like '13:00-14:00' into datetime objects."""
         try:
             # Support multiple formats
@@ -280,19 +292,23 @@ class AmsterdamParkingBot:
                 raise ValueError("Time range must have exactly two times")
             
             start_str, end_str = [part.strip() for part in parts]
-            today = datetime.now().date()
+            
+            # Use provided target_date or default to today
+            base_date = target_date.date() if target_date else datetime.now().date()
             
             # Parse times with flexible format
             for time_str in [start_str, end_str]:
                 if not re.match(r'^\d{1,2}:\d{2}$', time_str):
                     raise ValueError(f"Invalid time format: {time_str}. Use HH:MM format")
             
-            start_time = datetime.strptime(f"{today} {start_str}", "%Y-%m-%d %H:%M")
-            end_time = datetime.strptime(f"{today} {end_str}", "%Y-%m-%d %H:%M")
+            start_time = datetime.strptime(f"{base_date} {start_str}", "%Y-%m-%d %H:%M")
+            end_time = datetime.strptime(f"{base_date} {end_str}", "%Y-%m-%d %H:%M")
             
-            # Handle next day scenarios
-            if end_time <= start_time:
+            # Handle next day scenarios (only if no specific target_date provided)
+            if end_time <= start_time and target_date is None:
                 end_time += timedelta(days=1)
+            elif end_time <= start_time and target_date is not None:
+                raise ValueError("End time must be after start time when booking for specific date")
             
             # Validate reasonable duration (max 24 hours)
             duration_hours = (end_time - start_time).total_seconds() / 3600
@@ -540,7 +556,7 @@ class AmsterdamParkingBot:
         except Exception as e:
             logging.warning(f"Could not analyze monthly budget: {e}")
     
-    def _book_single_session(self, session: ParkingSession) -> bool:
+    def _book_single_session(self, session: ParkingSession, target_date: Optional[datetime] = None) -> bool:
         """Book a single parking session with robust error handling."""
         try:
             logging.info(f"Booking session: {session}")
@@ -552,15 +568,30 @@ class AmsterdamParkingBot:
             # Wait for form elements to be present
             self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "select, input[type='time'], input[placeholder*='tijd']")))
             
-            # Handle date selection
-            try:
-                date_dropdowns = self.driver.find_elements(By.CSS_SELECTOR, "select")
-                for dropdown in date_dropdowns:
-                    if any(option.text.lower() in ['vandaag', 'today'] for option in Select(dropdown).options):
-                        Select(dropdown).select_by_visible_text('Vandaag')
-                        break
-            except Exception as e:
-                logging.debug(f"Date selection issue (may be auto-selected): {e}")
+            # Handle date selection if booking for tomorrow
+            if target_date and target_date.date() > datetime.now().date():
+                date_dropdown = self.finder.find_date_dropdown()
+                if date_dropdown:
+                    try:
+                        select = Select(date_dropdown)
+                        # Try to select "Morgen" (tomorrow) option
+                        for option in select.options:
+                            if 'morgen' in option.text.lower() or 'tomorrow' in option.text.lower():
+                                select.select_by_visible_text(option.text)
+                                logging.debug(f"✓ Selected tomorrow: {option.text}")
+                                break
+                    except Exception as e:
+                        logging.warning(f"Could not select tomorrow date: {e}")
+            else:
+                # Default to today (Vandaag)
+                try:
+                    date_dropdowns = self.driver.find_elements(By.CSS_SELECTOR, "select")
+                    for dropdown in date_dropdowns:
+                        if any(option.text.lower() in ['vandaag', 'today'] for option in Select(dropdown).options):
+                            Select(dropdown).select_by_visible_text('Vandaag')
+                            break
+                except Exception as e:
+                    logging.debug(f"Date selection issue (may be auto-selected): {e}")
             
             # Set start time with multiple strategies
             start_time_str = session.start_time.strftime("%H:%M")
@@ -721,11 +752,11 @@ class AmsterdamParkingBot:
             logging.error(f"✗ Failed to book session {session}: {e}")
             return False
     
-    def _retry_session(self, session: ParkingSession, max_retries: int) -> bool:
+    def _retry_session(self, session: ParkingSession, max_retries: int, target_date: Optional[datetime] = None) -> bool:
         """Retry booking a session with exponential backoff."""
         for attempt in range(max_retries):
             try:
-                if self._book_single_session(session):
+                if self._book_single_session(session, target_date):
                     return True
             except InsufficientBalanceError:
                 raise  # Don't retry balance errors
@@ -737,10 +768,32 @@ class AmsterdamParkingBot:
         logging.error(f"✗ All retries failed for session: {session}")
         return False
     
-    def book_parking_sessions(self, time_range: str, session_minutes: int = None, max_break_minutes: int = None):
+    def book_parking_sessions(self, time_range: str, session_minutes: int = None, max_break_minutes: int = None, target_date: Optional[str] = None):
         """Main method to book multiple parking sessions."""
         start_time = None
         try:
+            # Parse and validate target date
+            booking_date = None
+            if target_date:
+                if target_date.lower() == 'today':
+                    booking_date = datetime.now()
+                elif target_date.lower() == 'tomorrow':
+                    booking_date = datetime.now() + timedelta(days=1)
+                else:
+                    try:
+                        booking_date = datetime.strptime(target_date, "%Y-%m-%d")
+                    except ValueError:
+                        raise ValueError(f"Invalid date format: {target_date}. Use 'today', 'tomorrow', or 'YYYY-MM-DD'")
+                
+                # Validate date is not in the past (except for today)
+                if booking_date.date() < datetime.now().date():
+                    raise ValueError("Cannot book parking sessions in the past")
+                
+                # Validate date is not more than 1 day in future (website limitation)
+                max_date = datetime.now().date() + timedelta(days=1)
+                if booking_date.date() > max_date:
+                    raise ValueError("Website only supports booking for today and tomorrow")
+            
             # Parse parameters with validation
             session_minutes = session_minutes or self.config['session_duration_minutes']
             max_break_minutes = max_break_minutes or self.config['max_break_minutes']
@@ -751,11 +804,12 @@ class AmsterdamParkingBot:
                 raise ValueError("Max break duration must be between 0 and 30 minutes")
             
             # Parse time range and calculate sessions
-            start_time, end_time = self._parse_time_range(time_range)
+            start_time, end_time = self._parse_time_range(time_range, booking_date)
             sessions = self._calculate_sessions(start_time, end_time, session_minutes, max_break_minutes)
             
             total_duration = int((end_time - start_time).total_seconds() / 60)
-            logging.info(f"Starting parking automation for {time_range} ({total_duration} minutes)")
+            date_str = "today" if booking_date is None else booking_date.strftime("%A, %B %d")
+            logging.info(f"Starting parking automation for {time_range} on {date_str} ({total_duration} minutes)")
             logging.info(f"Calculated {len(sessions)} sessions: {', '.join(str(s) for s in sessions)}")
             
             # Setup browser and login
@@ -790,7 +844,7 @@ class AmsterdamParkingBot:
             for i, session in enumerate(sessions, 1):
                 try:
                     logging.info(f"Processing session {i}/{len(sessions)}: {session}")
-                    if self._retry_session(session, self.config['max_retries']):
+                    if self._retry_session(session, self.config['max_retries'], booking_date):
                         successful_sessions.append(session)
                     else:
                         failed_sessions.append(session)
@@ -811,6 +865,7 @@ class AmsterdamParkingBot:
             # Final summary
             logging.info("=" * 60)
             logging.info(f"BOOKING SUMMARY:")
+            logging.info(f"Date: {date_str}")
             logging.info(f"Requested: {len(sessions)} sessions")
             logging.info(f"Successful: {len(successful_sessions)}")
             logging.info(f"Failed: {len(failed_sessions)}")
@@ -845,7 +900,8 @@ class AmsterdamParkingBot:
                 'successful_times': [str(s) for s in successful_sessions],
                 'failed_times': [str(s) for s in failed_sessions],
                 'balance_before': balance,
-                'balance_after': final_balance if 'final_balance' in locals() else balance
+                'balance_after': final_balance if 'final_balance' in locals() else balance,
+                'booking_date': date_str
             }
             
         except KeyboardInterrupt:
@@ -879,10 +935,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python park.py "13:00-14:00"                    # Basic 1-hour booking
+  python park.py "13:00-14:00"                    # Basic 1-hour booking for today
+  python park.py "13:00-14:00" --tomorrow         # Book for tomorrow
   python park.py "13:10-14:00" --session=15       # Custom session length
   python park.py "15:00-16:30" --max-break=3      # Custom break duration
   python park.py "09:00-17:00" --config=work.json # Different config file
+  python park.py "13:00-14:00" --tomorrow --dry-run  # Test tomorrow's calculation
         """
     )
     
@@ -901,6 +959,20 @@ Examples:
         type=int, 
         metavar="MINUTES",
         help="Maximum break duration in minutes (default: from config, usually 5)"
+    )
+    parser.add_argument(
+        "--today", 
+        action="store_const",
+        const="today",
+        dest="target_date",
+        help="Book sessions for today (default behavior)"
+    )
+    parser.add_argument(
+        "--tomorrow", 
+        action="store_const", 
+        const="tomorrow",
+        dest="target_date",
+        help="Book sessions for tomorrow"
     )
     parser.add_argument(
         "--config", 
@@ -930,13 +1002,20 @@ Examples:
         
         if args.dry_run:
             # Test mode - just calculate and display sessions
-            start_time, end_time = bot._parse_time_range(args.time_range)
+            target_date_obj = None
+            if args.target_date == 'today':
+                target_date_obj = datetime.now()
+            elif args.target_date == 'tomorrow':
+                target_date_obj = datetime.now() + timedelta(days=1)
+            
+            start_time, end_time = bot._parse_time_range(args.time_range, target_date_obj)
             session_minutes = args.session or bot.config['session_duration_minutes']
             max_break_minutes = args.max_break or bot.config['max_break_minutes']
             
             sessions = bot._calculate_sessions(start_time, end_time, session_minutes, max_break_minutes)
             
-            print(f"DRY RUN - Session calculation for {args.time_range}:")
+            date_str = "today" if target_date_obj is None else target_date_obj.strftime("%A, %B %d")
+            print(f"DRY RUN - Session calculation for {args.time_range} on {date_str}:")
             print(f"Total sessions: {len(sessions)}")
             for i, session in enumerate(sessions, 1):
                 print(f"  {i}. {session} ({session.duration_minutes} minutes)")
@@ -947,7 +1026,8 @@ Examples:
         result = bot.book_parking_sessions(
             time_range=args.time_range,
             session_minutes=args.session,
-            max_break_minutes=args.max_break
+            max_break_minutes=args.max_break,
+            target_date=args.target_date
         )
         
         if result is None:
