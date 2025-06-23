@@ -34,8 +34,6 @@ from selenium.common.exceptions import (
     WebDriverException,
     ElementClickInterceptedException
 )
-from webdriver_manager.chrome import ChromeDriverManager
-
 
 class InsufficientBalanceError(Exception):
     """Raised when account balance is too low for booking."""
@@ -258,8 +256,7 @@ class AmsterdamParkingBot:
             chrome_options.add_argument('--headless')
         
         try:
-            # Use webdriver-manager for automatic ChromeDriver management
-            service = Service(ChromeDriverManager().install())
+            service = Service("/usr/bin/chromedriver")
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             
             # Set timeouts
@@ -683,21 +680,30 @@ class AmsterdamParkingBot:
             if not end_time_set:
                 raise Exception("Could not set end time")
             
-            # Continue to next step
-            continue_selectors = [
-                "button[type='submit']",
-                ".btn-primary",
-                "button.btn",
-                "input[type='submit']"
+            # Continue to license plate step - look for "Kenteken" button
+            kenteken_selectors = [
+                "//button[contains(text(), 'Kenteken')]",
+                "//button[contains(text(), 'kenteken')]",
+                "//input[@value='Kenteken']",
+                "//a[contains(text(), 'Kenteken')]",
+                "button[type='submit']",  # Fallback
             ]
-            
-            for selector in continue_selectors:
+
+            button_found = False
+            for selector in kenteken_selectors:
                 try:
-                    button = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    if self._safe_click(button, "continue button"):
+                    if selector.startswith("//"):
+                        button = self.driver.find_element(By.XPATH, selector)
+                    else:
+                        button = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if self._safe_click(button, "kenteken button"):
+                        button_found = True
                         break
                 except NoSuchElementException:
                     continue
+
+            if not button_found:
+                raise Exception("Could not find Kenteken button")
             
             # Wait for license plate selection page
             self.wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'kenteken') or contains(text(), 'license')]")))
