@@ -328,28 +328,72 @@ class AmsterdamParkingBot:
         if total_minutes <= 0:
             raise ValueError("End time must be after start time")
         
+        # Calculate optimal number of sessions to avoid tiny remainders
+        ideal_sessions = total_minutes // session_minutes
+        remainder = total_minutes % session_minutes
+        
         sessions = []
         current_time = start_time
         
-        while current_time < end_time:
-            # Calculate session end time
-            session_end = min(current_time + timedelta(minutes=session_minutes), end_time)
-            sessions.append(ParkingSession(current_time, session_end))
+        # If remainder is too small (< 5 min), redistribute it across sessions
+        if remainder > 0 and remainder < 5 and ideal_sessions > 1:
+            # Extend each session slightly to absorb the remainder
+            extra_minutes_per_session = remainder // ideal_sessions
+            extra_remainder = remainder % ideal_sessions
             
-            # If this was the last session, break
-            if session_end >= end_time:
-                break
-            
-            # Calculate break duration (never exceed max_break_minutes)
-            remaining_time = int((end_time - session_end).total_seconds() / 60)
-            if remaining_time <= session_minutes:
-                # Last session - minimize break to fit exactly
-                break_minutes = max(1, min(max_break_minutes, remaining_time - session_minutes))
-                break_minutes = max(1, break_minutes)  # Ensure at least 1 minute break
-            else:
-                break_minutes = max_break_minutes
-            
-            current_time = session_end + timedelta(minutes=break_minutes)
+            for i in range(ideal_sessions):
+                # Calculate session duration with redistribution
+                current_session_duration = session_minutes + extra_minutes_per_session
+                if i < extra_remainder:
+                    current_session_duration += 1  # Distribute extra minutes
+                
+                session_end = current_time + timedelta(minutes=current_session_duration)
+                
+                # Ensure we don't exceed the end time
+                if session_end > end_time:
+                    session_end = end_time
+                
+                sessions.append(ParkingSession(current_time, session_end))
+                
+                # If this was the last session, break
+                if session_end >= end_time:
+                    break
+                
+                # Add break time for next session
+                if i < ideal_sessions - 1:  # No break after last session
+                    break_minutes = min(max_break_minutes, max(1, max_break_minutes))
+                    current_time = session_end + timedelta(minutes=break_minutes)
+                else:
+                    break
+        else:
+            # Original algorithm for cases with good remainder or single session
+            while current_time < end_time:
+                # Calculate session end time
+                session_end = min(current_time + timedelta(minutes=session_minutes), end_time)
+                sessions.append(ParkingSession(current_time, session_end))
+                
+                # If this was the last session, break
+                if session_end >= end_time:
+                    break
+                
+                # Calculate break duration
+                remaining_time = int((end_time - session_end).total_seconds() / 60)
+                
+                # Smart break calculation to avoid tiny final sessions
+                if remaining_time <= session_minutes + max_break_minutes:
+                    # We're close to the end - calculate optimal break
+                    if remaining_time <= session_minutes:
+                        # Would create tiny session - extend current or skip break
+                        break  # End here, don't create tiny session
+                    else:
+                        # Calculate break to make final session reasonable
+                        target_final_session = session_minutes
+                        break_minutes = max(1, min(max_break_minutes, remaining_time - target_final_session))
+                else:
+                    # Plenty of time left - use normal break
+                    break_minutes = max_break_minutes
+                
+                current_time = session_end + timedelta(minutes=break_minutes)
         
         if not sessions:
             raise ValueError("Could not calculate any valid sessions")
