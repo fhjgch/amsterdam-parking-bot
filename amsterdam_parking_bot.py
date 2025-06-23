@@ -709,11 +709,13 @@ class AmsterdamParkingBot:
             self.wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'kenteken') or contains(text(), 'license')]")))
             
             # Select configured license plate
-            plate_config = self.config['license_plate']
+            # Select configured license plate by name
+            plate_name = self.config['license_plate']  # Now just "Ganesh"
             plate_selectors = [
-                f"//button[contains(text(), '{plate_config}')]",
-                f"//div[contains(text(), '{plate_config}')]//button",
-                "//button[contains(@class, 'license') or contains(@class, 'plate')]"
+                f"//span[contains(text(), '{plate_name}')]//ancestor::button",
+                f"//span[contains(text(), '{plate_name}')]//parent::*[self::button or parent::button]",
+                f"//*[contains(., '{plate_name}') and (self::button or parent::button)]",
+                f"//button[.//span[contains(text(), '{plate_name}')]]",
             ]
             
             plate_selected = False
@@ -731,15 +733,57 @@ class AmsterdamParkingBot:
                 try:
                     plate_buttons = self.driver.find_elements(By.CSS_SELECTOR, "button")
                     for button in plate_buttons:
-                        if any(keyword in button.text.lower() for keyword in ['ganesh', 'mqr', plate_config.lower()]):
+                        if any(keyword in button.text.lower() for keyword in ['ganesh', 'mqr', plate_name.lower()]):
                             if self._safe_click(button, "fallback license plate"):
                                 plate_selected = True
                                 break
                 except Exception:
                     pass
+
+            # After the existing plate_selectors fail, add this before the final error:
+
+            # Check empty buttons for nested content containing Ganesh
+            try:
+                empty_buttons = [btn for btn in self.driver.find_elements(By.CSS_SELECTOR, "button") if btn.text.strip() == ""]
+                for button in empty_buttons:
+                    try:
+                        # Check if this button contains spans with Ganesh
+                        inner_html = button.get_attribute('innerHTML')
+                        if 'Ganesh' in inner_html or 'ganesh' in inner_html.lower():
+                            if self._safe_click(button, "license plate with Ganesh"):
+                                plate_selected = True
+                                break
+                    except Exception as e:
+                        logging.debug(f"Error checking button innerHTML: {e}")
+                        continue
+            except Exception as e:
+                logging.debug(f"Error in empty button fallback: {e}")
+
+            # Special handling for empty buttons with nested spans
+            if not plate_selected:
+                try:
+                    logging.debug("Checking empty buttons for nested license plate content...")
+                    empty_buttons = [btn for btn in self.driver.find_elements(By.CSS_SELECTOR, "button") if btn.text.strip() == ""]
+                    
+                    for i, button in enumerate(empty_buttons):
+                        try:
+                            inner_html = button.get_attribute('innerHTML')
+                            logging.debug(f"Empty button {i+1} innerHTML: {inner_html[:100]}...")  # Log first 100 chars
+                            
+                            if plate_name.lower() in inner_html.lower():
+                                logging.debug(f"Found {plate_name} in button {i+1}")
+                                if self._safe_click(button, f"license plate button {i+1} with {plate_name}"):
+                                    plate_selected = True
+                                    break
+                        except Exception as e:
+                            logging.debug(f"Error checking button {i+1}: {e}")
+                            continue
+                            
+                except Exception as e:
+                    logging.debug(f"Error in innerHTML license plate search: {e}")
             
             if not plate_selected:
-                raise Exception(f"Could not select license plate: {plate_config}")
+                raise Exception(f"Could not select license plate: {plate_name}")
             
             # Continue to payment step
             for selector in continue_selectors:
