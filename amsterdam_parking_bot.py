@@ -332,7 +332,6 @@ class AmsterdamParkingBot:
 
             plate_selectors = [
                 f"//label[.//span[contains(text(), '{plate_name}')]]",
-                f"//input[@type='radio'][@value='MQR108']/following-sibling::span[contains(text(), '{plate_name}')]//parent::label",
                 f"//span[contains(text(), '{plate_name}')]//ancestor::label",
                 f"//label[contains(., '{plate_name}')]"
             ]
