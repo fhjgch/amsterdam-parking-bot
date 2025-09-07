@@ -24,6 +24,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.chrome import ChromeDriverManager
 
 class InsufficientBalanceError(Exception):
     pass
@@ -110,7 +112,7 @@ class AmsterdamParkingBot:
         if self.config['headless']:
             options.add_argument('--headless')
         
-        self.driver = webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=options)
+        self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()))
         self.driver.set_page_load_timeout(30)
         self.driver.implicitly_wait(5)
         self.wait = WebDriverWait(self.driver, self.config['timeout_seconds'])
