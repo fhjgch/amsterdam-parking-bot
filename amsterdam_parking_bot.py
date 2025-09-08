@@ -516,11 +516,12 @@ def main():
     
     args = parser.parse_args()
     
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-    
     try:
         bot = AmsterdamParkingBot(args.config)
+
+        if args.verbose:
+            logging.getLogger().setLevel(logging.DEBUG)
+    
         
         if args.dry_run:
             # Calculate sessions only
