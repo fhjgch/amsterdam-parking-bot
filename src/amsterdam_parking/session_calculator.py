@@ -14,6 +14,8 @@ def split_period_in_sessions(parking_period, session_duration, break_duration):
     session_period = copy(parking_period)
     while session_period.start < parking_period.end:
         session_period.end = session_period.start + timedelta(minutes=session_duration)
+        if session_period.end > parking_period.end:
+            session_period.end = parking_period.end
         sessions.append(copy(session_period))
         session_period.start = session_period.end + timedelta(minutes=break_duration)
     return sessions

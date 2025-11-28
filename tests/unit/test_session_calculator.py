@@ -67,6 +67,18 @@ from src.amsterdam_parking.session_calculator import Period, split_period_in_ses
                 Period(datetime(2025, 11, 28, 14, 0), datetime(2025, 11, 28, 14, 5)),
             ],
         ),
+        (
+            Period(
+                start=datetime(2025, 11, 28, 13, 3), end=datetime(2025, 11, 28, 13, 56)
+            ),
+            15,
+            10,
+            [
+                Period(datetime(2025, 11, 28, 13, 3), datetime(2025, 11, 28, 13, 18)),
+                Period(datetime(2025, 11, 28, 13, 28), datetime(2025, 11, 28, 13, 43)),
+                Period(datetime(2025, 11, 28, 13, 53), datetime(2025, 11, 28, 13, 56)),
+            ],
+        ),
     ],
     ids=[
         "13:00-14:00@5/10",
@@ -74,6 +86,7 @@ from src.amsterdam_parking.session_calculator import Period, split_period_in_ses
         "13:00-14:05@5/10",
         "13:00-14:10@5/10",
         "13:00-14:05@10/10",
+        "13:03-13:56@15/10",
     ],
 )
 def test_split_period_in_sessions(
