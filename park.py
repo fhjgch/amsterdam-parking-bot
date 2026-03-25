@@ -431,11 +431,13 @@ class ParkingBot:
             self._print_status(status_before, label="before")
 
             ok, fail = 0, 0
+            failed_sessions: list[ParkingSession] = []
             for i, session in enumerate(sessions, 1):
                 if self._book_session(session, permit_id, plate, meter):
                     ok += 1
                 else:
                     fail += 1
+                    failed_sessions.append(session)
                 if i < len(sessions):
                     time.sleep(2)
 
@@ -443,10 +445,17 @@ class ParkingBot:
             self._print_status(status_after, label="after")
 
             cost = status_before["balance"] - status_after["balance"]
-            logging.info(
-                f"Done: {ok}/{len(sessions)} booked"
-                + (f"  |  cost: €{cost:.2f}" if cost > 0 else "")
-            )
+            summary = f"Done: {ok}/{len(sessions)} booked"
+            if cost > 0:
+                summary += f"  |  cost: €{cost:.2f}"
+            logging.info(summary)
+
+            if failed_sessions:
+                logging.warning(
+                    f"{fail} session(s) need to be rebooked: "
+                    + ", ".join(str(s) for s in failed_sessions)
+                )
+
             return ok, fail
 
         finally:
