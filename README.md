@@ -1,223 +1,148 @@
-# 🚗 Amsterdam Parking Automation Bot
+# Amsterdam Parking Bot
 
-> **Save money on Amsterdam parking by automatically splitting long sessions into cheaper short intervals**
+Automates split parking sessions on [parkeervergunningen.amsterdam.nl](https://parkeervergunningen.amsterdam.nl) to minimise cost.
 
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-[![Selenium](https://img.shields.io/badge/selenium-4.15.0-green.svg)](https://selenium-python.readthedocs.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Amsterdam's visitor parking permit charges per minute. By booking several short sessions with small breaks instead of one long block, you pay only for the minutes the car is actively parked rather than a continuous stretch.
 
-## 🎯 What This Does
-
-Amsterdam parking costs can be significantly reduced by booking multiple short sessions with breaks instead of one long session. This bot automates that process:
-
-**Instead of:** 1 hour session (13:00-14:00)  
-**Books:** 4 sessions of 10 minutes each with 5-minute breaks  
-→ `13:00-13:10`, `13:15-13:25`, `13:30-13:40`, `13:45-13:55`
-
-## ✨ Key Features
-
-- 🎛️ **Flexible Timing** - Configurable session duration and break times
-- 🧠 **Smart Scheduling** - Never exceeds your maximum break limit  
-- 💰 **Budget Tracking** - Monitors monthly parking allowance (150h default)
-- 🔄 **Robust Retry Logic** - Individual session retries, books what it can
-- 📊 **Detailed Reporting** - Shows exactly what succeeded/failed
-- 🛡️ **Production Ready** - Multi-strategy element finding, handles website changes
-- 🔍 **Debug Mode** - Test mode and verbose logging for troubleshooting
-
-## 🚀 Quick Start
-
-### 1. Install
-```bash
-git clone https://github.com/yourusername/amsterdam-parking-bot.git
-cd amsterdam-parking-bot
-pip install -r requirements.txt
-```
-
-### 2. Configure
-```bash
-cp config.example.json config.json
-# Edit config.json with your meldcode and pincode
-```
-
-### 3. Test & Run
-```bash
-# Test configuration (no actual booking)
-python park.py "13:00-14:00" --dry-run
-
-# Book your first session
-python park.py "13:00-14:00"
-```
-
-## 📊 Sample Output
+**Example** — covering 13:00–16:00 with 10-minute sessions and 5-minute breaks:
 
 ```
-[13:45:01] INFO: Starting parking automation for 13:00-14:00 (60 minutes)
-[13:45:02] INFO: Calculated 4 sessions: 13:00-13:10, 13:15-13:25, 13:30-13:40, 13:45-13:55
-[13:45:06] INFO: ✓ Successfully logged in
-[13:45:07] INFO: ACCOUNT STATUS:
-[13:45:07] INFO:            Balance: €45.20
-[13:45:07] INFO:            Time Budget: 87h 23min remaining
-[13:45:08] INFO: TIME BUDGET ANALYSIS (June 2025):
-[13:45:08] INFO:            Days elapsed: 15/30 
-[13:45:08] INFO:            Hours used: 62h 37min (4.2h/day average)
-[13:45:08] INFO:            Status: 12h 23min below schedule ✓
-[13:45:08] INFO:            Projected month-end: 125h total usage
-
-[13:45:30] INFO: ============================================================
-[13:45:30] INFO: BOOKING SUMMARY:
-[13:45:30] INFO: Requested: 4 sessions
-[13:45:30] INFO: Successful: 4
-[13:45:30] INFO: Failed: 0
-[13:45:31] INFO: FINAL ACCOUNT STATUS:
-[13:45:31] INFO:            Balance: €37.96 (spent: €7.24)
-[13:45:31] INFO:            Time Budget: 86h 23min
+13:00–13:10  13:15–13:25  13:30–13:40  13:45–13:55
+14:00–14:10  14:15–14:25  14:30–14:40  14:45–14:55
+15:00–15:10  15:15–15:25  15:30–15:40  15:45–15:55
 ```
-
-## 🎛️ Usage Examples
-
-```bash
-# Basic: 1-hour split into optimal sessions (today)
-python park.py "13:00-14:00"
-
-# Book for tomorrow
-python park.py "13:00-14:00" --tomorrow
-
-# Perfect timing for non-hour intervals
-python park.py "13:10-14:00"
-# → 13:10-13:20, 13:25-13:35, 13:40-13:50, 13:55-14:00
-
-# Custom session duration for tomorrow
-python park.py "09:00-17:00" --tomorrow --session=15
-
-# Shorter breaks (max 5min still enforced)
-python park.py "15:00-16:30" --max-break=3
-
-# Test mode - calculate without booking
-python park.py "13:00-14:00" --tomorrow --dry-run
-
-# Debug mode with detailed logs
-python park.py "13:00-14:00" --verbose
-```
-
-## ⚙️ Configuration
-
-Key settings in `config.json`:
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `username` | Your meldcode | **Required** |
-| `password` | Your pincode | **Required** |
-| `session_duration_minutes` | Length per session | 10 |
-| `max_break_minutes` | Max break between sessions | 5 |
-| `balance_warning_threshold` | Warn below this amount (€) | 30.00 |
-| `monthly_time_budget` | Hours per month | 150 |
-| `headless` | Run browser in background | false |
-
-## 🎯 Smart Features
-
-### Intelligent Session Splitting
-The bot automatically calculates optimal session timing:
-- **Respects your max break limit** (never exceeds 5 minutes by default)
-- **Fits exact end times** - no wasted time or missed periods
-- **Handles edge cases** - works with any duration and timing
-
-### Monthly Budget Tracking
-Tracks your 150-hour monthly allowance:
-```
-TIME BUDGET ANALYSIS (June 2025):
-           Days elapsed: 15/30 
-           Hours used: 62h 37min (4.2h/day average)
-           Status: 12h 23min below schedule ✓
-           Projected month-end: 125h total usage
-```
-
-### Robust Error Handling
-- **Individual session retries** - if session 2 fails, still books sessions 1, 3, 4
-- **Balance monitoring** - stops before insufficient funds
-- **Website changes** - multiple fallback strategies for finding elements
-- **Detailed reporting** - know exactly what needs manual booking
-
-## 🛡️ Safety & Reliability
-
-### Production Features
-- ✅ **Multi-strategy element finding** - adapts to website changes
-- ✅ **Auto ChromeDriver management** - no manual driver installation
-- ✅ **Rate limiting protection** - progressive delays between bookings
-- ✅ **Comprehensive logging** - debug any issues easily
-- ✅ **Configuration validation** - catches setup errors early
-
-### Security
-- 🔒 **Local credential storage** - config.json (not committed to git)
-- 🔒 **No data transmission** - runs entirely on your machine
-- 🔒 **Read-only account access** - only books parking, doesn't modify account
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Configuration Error: "Username required"**
-```bash
-# Fix: Update config.json with your credentials
-cp config.example.json config.json
-nano config.json  # Add your meldcode and pincode
-```
-
-**Login Failed**
-```bash
-# Debug with visible browser
-# Set in config.json: "headless": false
-python park.py "13:00-14:00" --verbose
-```
-
-**Insufficient Balance**
-```bash
-# Top up your account manually, then run:
-python park.py "13:00-14:00"
-```
-
-**Website Changes**
-```bash
-# The bot has multiple fallback strategies, but if it fails:
-python park.py "13:00-14:00" --verbose
-# Check the logs and open an issue with the error details
-```
-
-## 📚 Documentation
-
-- **[Setup Guide](docs/SETUP.md)** - Detailed installation and configuration
-- **[Code Explanation](docs/EXPLANATION.md)** - How the automation works
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
-
-## 🤝 Contributing
-
-Contributions welcome! The Amsterdam parking website changes occasionally, so updates to element selectors may be needed.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/improvement`)
-3. Test your changes thoroughly
-4. Commit your changes (`git commit -am 'Add new feature'`)
-5. Push to the branch (`git push origin feature/improvement`)
-6. Open a Pull Request
-
-## ⚠️ Disclaimer
-
-- **Personal use only** - This tool is for individual parking management
-- **No warranty** - Use at your own risk, always verify bookings manually for critical sessions
-- **Rate limiting** - Don't run excessively to avoid being blocked by the website
-- **Terms compliance** - Ensure your usage complies with the Amsterdam parking website's terms of service
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built for Amsterdam residents dealing with expensive parking costs
-- Uses Selenium WebDriver for reliable automation
-- Inspired by the need to optimize municipal parking systems
 
 ---
 
-**💡 Pro Tip:** Start with `--dry-run` mode to test your timing strategy before booking real sessions!
+## Requirements
 
-**⭐ Found this useful?** Give it a star and share with fellow Amsterdam drivers!
+- Python 3.10+
+- Google Chrome
+- ChromeDriver matching your Chrome version (placed at `/usr/bin/chromedriver` or update the path in `park.py`)
+
+---
+
+## Setup
+
+```bash
+# 1. Clone and enter the repo
+git clone <repo-url>
+cd amsterdam-parking-bot
+
+# 2. Create a virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Create your config file
+cp config.example.json config.json
+# Then open config.json and fill in your credentials
+```
+
+---
+
+## Configuration
+
+`config.json` is gitignored and never committed. Copy the example and edit it:
+
+```json
+{
+  "username": "your_meldcode",
+  "password": "your_pincode",
+  "license_plate": "ABC123",
+  "meter_number": "19850",
+  "session_duration_minutes": 10,
+  "break_duration_minutes": 5,
+  "headless": false,
+  "timeout": 15
+}
+```
+
+| Field | Description | Default |
+|---|---|---|
+| `username` | Your meldcode | required |
+| `password` | Your pincode | required |
+| `license_plate` | Default license plate | required to book |
+| `meter_number` | Parking meter number (the number on the physical machine) | required to book |
+| `session_duration_minutes` | Length of each parking session | 10 |
+| `break_duration_minutes` | Break between sessions | 5 |
+| `headless` | Run Chrome in the background | false |
+| `timeout` | Selenium element wait timeout (seconds) | 15 |
+
+All fields except `username` and `password` can be overridden with CLI flags.
+
+---
+
+## Usage
+
+```bash
+# Book sessions for today
+python park.py "13:00-16:00"
+
+# Book for tomorrow
+python park.py "13:00-16:00" --tomorrow
+
+# Preview sessions without booking anything
+python park.py "13:00-16:00" --dry-run
+
+# Check your time and money balance
+python park.py --status
+
+# Override session length and break
+python park.py "13:00-16:00" --session=15 --break=3
+
+# Override plate and meter on the fly
+python park.py "13:00-16:00" --plate=ABC123 --meter=19850
+
+# Use a different config file
+python park.py "13:00-16:00" --config=work.json
+
+# Verbose output for debugging
+python park.py "13:00-16:00" -v
+```
+
+---
+
+## Sample output
+
+```
+09:32:00  INFO     Planned 12 session(s) for 25 Mar 2026  [10 min on / 5 min off]
+09:32:00  INFO       1. 13:00–13:10  (10 min)
+09:32:00  INFO       2. 13:15–13:25  (10 min)
+           ...
+09:32:01  INFO     ✓ Logged in
+09:32:02  INFO     [before] Tijdsaldo : 14 uur 55 minuten
+09:32:02  INFO     [before] Geldsaldo : €61.06
+09:32:04  INFO     Session 1/12: 13:00–13:10
+09:32:07  INFO       ✓ 13:00–13:10  (10 min)
+           ...
+09:34:10  INFO     [after] Tijdsaldo : 12 uur 55 minuten
+09:34:10  INFO     [after] Geldsaldo : €44.15
+09:34:10  INFO     Done: 12/12 booked  |  cost: €16.91
+```
+
+---
+
+## Troubleshooting
+
+**Login fails** — double-check meldcode and pincode in `config.json`. Set `"headless": false` to watch the browser.
+
+**Sessions fail after login** — run with `-v` to see exactly which step breaks. The meter number must be valid for your permit area; you can find it by looking at the physical machine or the [Amsterdam parking map](https://www.amsterdam.nl/parkeren/parkeertarieven/).
+
+**ChromeDriver version mismatch** — install the driver that matches your Chrome version:
+```bash
+# Ubuntu/Debian
+sudo apt install chromium-driver
+
+# Or download from https://googlechromelabs.github.io/chrome-for-testing/
+```
+Then update the path in `park.py` if it is not at `/usr/bin/chromedriver`.
+
+---
+
+## Security
+
+- `config.json` is listed in `.gitignore` and will never be committed.
+- Credentials stay on your machine; the script only talks to `parkeervergunningen.amsterdam.nl`.

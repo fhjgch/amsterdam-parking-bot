@@ -1,0 +1,10 @@
+{
+  "username": "your_meldcode",
+  "password": "your_pincode",
+  "license_plate": "ABC123",
+  "meter_number": "19850",
+  "session_duration_minutes": 10,
+  "break_duration_minutes": 5,
+  "headless": false,
+  "timeout": 15
+}
