@@ -403,16 +403,14 @@ class ParkingBot:
         start, end = self._parse_range(time_range, base_date)
         sessions   = self._calculate_sessions(start, end, session_min, break_min)
 
-        date_label = (base_date or datetime.now()).strftime("%d %b %Y")
-        logging.info(
-            f"Planned {len(sessions)} session(s) for {date_label}  "
-            f"[{session_min} min on / {break_min} min off]"
-        )
-        for i, s in enumerate(sessions, 1):
-            logging.info(f"  {i}. {s}  ({s.minutes} min)")
-
         if dry_run:
-            logging.info("Dry run – no bookings made.")
+            date_label = (base_date or datetime.now()).strftime("%d %b %Y")
+            logging.info(
+                f"Dry run – {len(sessions)} session(s) for {date_label}  "
+                f"[{session_min} min on / {break_min} min off]"
+            )
+            for i, s in enumerate(sessions, 1):
+                logging.info(f"  {i}. {s}  ({s.minutes} min)")
             return 0, 0
 
         if not plate:
@@ -434,7 +432,6 @@ class ParkingBot:
 
             ok, fail = 0, 0
             for i, session in enumerate(sessions, 1):
-                logging.info(f"Session {i}/{len(sessions)}: {session}")
                 if self._book_session(session, permit_id, plate, meter):
                     ok += 1
                 else:
