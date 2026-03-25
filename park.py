@@ -342,7 +342,7 @@ class ParkingBot:
 
             # 6. Confirm: wait for redirect back to permit page
             try:
-                WebDriverWait(self.driver, 20).until(
+                WebDriverWait(self.driver, 30).until(
                     EC.any_of(
                         EC.url_matches(
                             rf"{re.escape(BASE_URL)}/permit/{permit_id}$"
