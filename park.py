@@ -221,11 +221,10 @@ class ParkingBot:
         """Scrape Tijdsaldo and Geldsaldo from the permit detail page."""
         self.driver.get(f"{BASE_URL}/permit/{permit_id}")
         body = self._find(By.TAG_NAME, "body").text
+        logging.debug(f"Status page body:\n{body}")
 
-        time_match = re.search(
-            r"Tijdsaldo\s+([\d]+\s*uur\s*[\d]+\s*minuten)", body
-        )
-        money_match = re.search(r"Geldsaldo\s+€\s*([\d,]+)", body)
+        time_match = re.search(r"Tijdsaldo\s+([^\n]+)", body)
+        money_match = re.search(r"Geldsaldo\s+€\s*([\d,\.]+)", body)
 
         return {
             "time_balance": time_match.group(1).strip() if time_match else "Unknown",
